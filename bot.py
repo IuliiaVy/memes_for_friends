@@ -37,8 +37,14 @@ WELCOME_TEXT = (
 )
 
 async def download_image(message: Message) -> bytes:
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
+    if message.photo:
+        file_id = message.photo[-1].file_id
+    elif message.sticker:
+        file_id = message.sticker.file_id
+    else:
+        raise ValueError("Unsupported media type")
+    
+    file = await bot.get_file(file_id)
     result = await bot.download_file(file.file_path)
     return result.read()
 
@@ -53,8 +59,8 @@ async def cmd_start_help(message: Message):
 
 @dp.message(Command("brigada"))
 async def cmd_brigada(message: Message):
-    if not message.reply_to_message or not message.reply_to_message.photo:
-        await message.reply("Ответьте этой командой на сообщение с картинкой (мемом).")
+    if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.sticker):
+        await message.reply("Ответьте этой командой на сообщение с картинкой или стикером.")
         return
     
     processing_msg = await message.reply("Вызываю пояснительную бригаду ИИ...")
@@ -70,8 +76,8 @@ async def cmd_vibe_check(message: Message):
     """
     Развлекательная функция: проверка вайба мема
     """
-    if not message.reply_to_message or not message.reply_to_message.photo:
-        await message.reply("Ответьте этой командой на сообщение с фотографией.")
+    if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.sticker):
+        await message.reply("Ответьте этой командой на сообщение с картинкой или стикером.")
         return
     
     processing_msg = await message.reply("Сканирую ауру мема...")
@@ -87,8 +93,8 @@ async def cmd_post_to_best(message: Message):
     """
     Сохранение любимого мема в публичный канал
     """
-    if not message.reply_to_message or not message.reply_to_message.photo:
-        await message.reply("Ответьте этой командой на мем, который хотите вывесить на главную доску.")
+    if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.sticker):
+        await message.reply("Ответьте этой командой на мем или стикер, который хотите вывесить на главную доску.")
         return
     
     if not config.CHANNEL_ID:

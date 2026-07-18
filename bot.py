@@ -3,7 +3,7 @@ import os
 import re
 import random
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message
+from aiogram.types import Message, BotCommand
 from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -184,8 +184,19 @@ async def start_web_server():
     await site.start()
     print(f"Web server started on port {port}")
 
+async def set_commands(bot: Bot):
+    commands = [
+        BotCommand(command="brigada", description="Вызвать пояснительную бригаду для мема"),
+        BotCommand(command="vibe_check", description="Проверить ауру (вайб) мема"),
+        BotCommand(command="post_to_best", description="Отправить мем на главную доску"),
+        BotCommand(command="help", description="Показать правила Шерифа")
+    ]
+    await bot.set_my_commands(commands)
+
 async def main():
     print("Meme Police Bot started")
+    # Регистрируем команды в меню Telegram
+    await set_commands(bot)
     # Запускаем веб-сервер параллельно с поллингом телеграм-бота
     asyncio.create_task(start_web_server())
     await dp.start_polling(bot)

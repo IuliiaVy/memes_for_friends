@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 import config
-from ai_service import is_political, explain_meme, roast_meme
+from ai_service import is_political, explain_meme, roast_meme, vibe_check
 
 if not config.BOT_TOKEN:
     print("No BOT_TOKEN. Exiting.")
@@ -42,46 +42,14 @@ async def download_image(message: Message) -> bytes:
     result = await bot.download_file(file.file_path)
     return result.read()
 
-@dp.message(F.text)
-async def handle_text(message: Message):
-    if BAD_CAT_NAME_PATTERN.search(message.text):
-        await message.delete()
-        await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
+# ================= КОМАНДЫ (COMMANDS) =================
 
-@dp.message(F.photo)
-async def handle_photo(message: Message):
-    # 1. Check text caption for bad cat name
-    if message.caption and BAD_CAT_NAME_PATTERN.search(message.caption):
-        await message.delete()
-        await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
-        return
-
-    # Download image bytes
-    image_bytes = await download_image(message)
-    
-    # 2. Check for political content
-    is_pol = await is_political(image_bytes)
-    if is_pol:
-        if config.ADMIN_CHAT_ID:
-            try:
-                # Отправляем поясняющее сообщение
-                await bot.send_message(
-                    chat_id=config.ADMIN_CHAT_ID,
-                    text=f"🚨 Шериф конфисковал политический мем от @{message.from_user.username}. Вот что пытались пронести в город:"
-                )
-                # Пересылаем мем админу перед удалением
-                await message.forward(chat_id=config.ADMIN_CHAT_ID)
-            except Exception as e:
-                print(f"Не удалось переслать мем админу: {e}")
-        
-        await message.delete()
-        await message.answer(f"@{message.from_user.username}, мем конфискован. Оставим политику для новостей.")
-        return
-
-    # 3. Random meme roast (1 in 20 chance)
-    if random.randint(1, 20) == 1:
-        roast = await roast_meme(image_bytes)
-        await message.reply(roast)
+@dp.message(Command("start", "help"))
+async def cmd_start_help(message: Message):
+    """
+    Приветственное сообщение и справка по боту.
+    """
+    await message.reply(WELCOME_TEXT)
 
 @dp.message(Command("brigada"))
 async def cmd_brigada(message: Message):
@@ -96,26 +64,6 @@ async def cmd_brigada(message: Message):
         await processing_msg.edit_text(explanation)
     except Exception as e:
         await processing_msg.edit_text("Произошла ошибка при анализе мема.")
-
-from ai_service import is_political, explain_meme, roast_meme, vibe_check
-
-@dp.message(Command("start", "help"))
-async def cmd_start_help(message: Message):
-    """
-    Приветственное сообщение и справка по боту.
-    """
-    await message.reply(WELCOME_TEXT)
-
-@dp.message(F.new_chat_members)
-async def welcome_new_members(message: Message):
-    """
-    Приветствие при добавлении бота в новую группу.
-    """
-    bot_me = await bot.get_me()
-    for member in message.new_chat_members:
-        if member.id == bot_me.id:
-            await message.answer(WELCOME_TEXT)
-            break
 
 @dp.message(Command("vibe_check"))
 async def cmd_vibe_check(message: Message):
@@ -158,6 +106,64 @@ async def cmd_post_to_best(message: Message):
         print(f"Error copying to channel: {e}")
         await message.reply("Не удалось сохранить мем. Возможно, я не являюсь администратором в канале или ID канала указан неверно.")
 
+# ================= СОБЫТИЯ (EVENTS) =================
+
+@dp.message(F.new_chat_members)
+async def welcome_new_members(message: Message):
+    """
+    Приветствие при добавлении бота в новую группу.
+    """
+    bot_me = await bot.get_me()
+    for member in message.new_chat_members:
+        if member.id == bot_me.id:
+            await message.answer(WELCOME_TEXT)
+            break
+
+# ================= ОБЩИЕ ФИЛЬТРЫ (TEXT/PHOTO) =================
+# Эти фильтры должны идти в самом конце, иначе они перехватят команды!
+
+@dp.message(F.photo)
+async def handle_photo(message: Message):
+    # 1. Check text caption for bad cat name
+    if message.caption and BAD_CAT_NAME_PATTERN.search(message.caption):
+        await message.delete()
+        await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
+        return
+
+    # Download image bytes
+    image_bytes = await download_image(message)
+    
+    # 2. Check for political content
+    is_pol = await is_political(image_bytes)
+    if is_pol:
+        if config.ADMIN_CHAT_ID:
+            try:
+                # Отправляем поясняющее сообщение
+                await bot.send_message(
+                    chat_id=config.ADMIN_CHAT_ID,
+                    text=f"🚨 Шериф конфисковал политический мем от @{message.from_user.username}. Вот что пытались пронести в город:"
+                )
+                # Пересылаем мем админу перед удалением
+                await message.forward(chat_id=config.ADMIN_CHAT_ID)
+            except Exception as e:
+                print(f"Не удалось переслать мем админу: {e}")
+        
+        await message.delete()
+        await message.answer(f"@{message.from_user.username}, мем конфискован. Оставим политику для новостей.")
+        return
+
+    # 3. Random meme roast (1 in 20 chance)
+    if random.randint(1, 20) == 1:
+        roast = await roast_meme(image_bytes)
+        await message.reply(roast)
+
+@dp.message(F.text)
+async def handle_text(message: Message):
+    if BAD_CAT_NAME_PATTERN.search(message.text):
+        await message.delete()
+        await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
+
+# ================= ВЕБ-СЕРВЕР (ДЛЯ RENDER) =================
 
 from aiohttp import web
 

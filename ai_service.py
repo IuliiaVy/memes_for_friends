@@ -12,7 +12,7 @@ async def is_political(image_bytes: bytes, mime_type: str = 'image/jpeg') -> boo
     prompt = "Ты - строгий ИИ-модератор. Проанализируй это изображение (и любой текст на нем). Есть ли здесь политический подтекст, изображения политических деятелей, отсылки к государственным органам, выборам, законам, войне или оппозиции? Ответь строго одним словом: ДА или НЕТ."
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.5-flash',
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt
@@ -29,7 +29,7 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
     prompt = "Объясни смысл этого мема. Если на картинке есть текст на английском или другом языке - обязательно переведи его на русский. Объясни юмор коротко и смешно."
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.5-flash',
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt
@@ -45,7 +45,7 @@ async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
     prompt = "Напиши короткую, саркастичную, токсичную (но дружелюбную) рецензию на этот мем на русском языке. Максимум 2 предложения. Сделай вид, что ты элитарный критик мемов."
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.5-flash',
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt
@@ -61,7 +61,7 @@ async def vibe_check(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
     prompt = "Проведи 'vibe check' (проверку вайба) этого мема или картинки. Выдай результат в формате:\nВайб: [короткое смешное название вайба]\nОписание: [почему от картинки такой вайб].\nПример: 'Вайб: Хаотично-депрессивный. Описание: Этот мем излучает энергию человека, который спит 3 часа в день.'"
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.5-flash',
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt

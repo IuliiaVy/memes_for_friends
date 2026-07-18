@@ -1,6 +1,7 @@
 import config
 from google import genai
 from google.genai import types
+import re
 
 if config.GEMINI_API_KEY:
     client = genai.Client(api_key=config.GEMINI_API_KEY)
@@ -35,7 +36,10 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
                 prompt
             ]
         )
-        return response.text
+        text = response.text
+        # Превращаем маркдаун-звездочки в HTML-жирность
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+        return text
     except Exception as e:
         print(f"Error explaining meme: {e}")
         return "Не удалось объяснить мем. Мои нейроны запутались."
@@ -51,7 +55,9 @@ async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
                 prompt
             ]
         )
-        return response.text
+        text = response.text
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+        return text
     except Exception as e:
         print(f"Error roasting meme: {e}")
         return "Мем настолько плох, что у меня сломался процессор."
@@ -67,7 +73,9 @@ async def vibe_check(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
                 prompt
             ]
         )
-        return response.text
+        text = response.text
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+        return text
     except Exception as e:
         print(f"Error checking vibe: {e}")
         return "Не могу проверить вайб. Мои нейроны не настроились на эту волну."

@@ -181,8 +181,7 @@ async def handle_text(message: Message):
         await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
         return
         
-    bot_me = await bot.get_me()
-    if f"@{bot_me.username}" in message.text:
+    if "@meme_sheriff_bot" in message.text:
         await message.reply(random.choice(SHERIFF_PHRASES))
 
 # ================= ВЕБ-СЕРВЕР (ДЛЯ RENDER) =================

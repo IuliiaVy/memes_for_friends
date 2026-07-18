@@ -21,6 +21,17 @@ dp = Dispatcher()
 # Regex for bad cat name
 BAD_CAT_NAME_PATTERN = re.compile(r'\b(пиздюк|пездюк|пестдюк|писдюк)[а-я]*\b', re.IGNORECASE)
 
+SHERIFF_PHRASES = [
+    "Мой револьвер всегда заряжен, сынок. 🤠",
+    "В этом городе закон — это я. 🎖️",
+    "Держи руки на виду. Я слежу за тобой. 👀",
+    "Тут не место для таких шуточек. 🌵",
+    "Тише едешь — дольше живешь, партнер. 🐎",
+    "Я пью кофе черным, а правосудие подаю холодным. ☕",
+    "Еще одно слово, и ты проведешь ночь в камере. 🚔",
+    "Проходи мимо, если не ищешь неприятностей. 🛑"
+]
+
 WELCOME_TEXT = (
     "Я смотрю, вы тут совсем от рук отбились. Спрячьте свои пушки и выньте руки из карманов. "
     "Я ваш новый шериф, блюститель закона, и я пришел навести здесь порядок.\n\n"
@@ -168,6 +179,11 @@ async def handle_text(message: Message):
     if BAD_CAT_NAME_PATTERN.search(message.text):
         await message.delete()
         await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
+        return
+        
+    bot_me = await bot.get_me()
+    if f"@{bot_me.username}" in message.text:
+        await message.reply(random.choice(SHERIFF_PHRASES))
 
 # ================= ВЕБ-СЕРВЕР (ДЛЯ RENDER) =================
 

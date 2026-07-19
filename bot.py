@@ -112,17 +112,26 @@ async def cmd_post_to_best(message: Message):
     if not config.CHANNEL_ID:
         await message.reply("Канал для мемов еще не настроен администратором.")
         return
+        
+    processing_msg = await message.reply("Проверяю мем на легальность перед публикацией...")
     
     try:
+        image_bytes = await download_image(message.reply_to_message)
+        is_pol = await is_political(image_bytes)
+        
+        if is_pol:
+            await processing_msg.edit_text("Отказано. Этот мем содержит политику, жесть или запрещенный контент. На главную доску такое не вешаем.")
+            return
+            
         await bot.copy_message(
             chat_id=config.CHANNEL_ID,
             from_chat_id=message.chat.id,
             message_id=message.reply_to_message.message_id
         )
-        await message.reply("Шедевр вывешен на главную доску! 📜")
+        await processing_msg.edit_text("Шедевр вывешен на главную доску! 📜")
     except Exception as e:
         print(f"Error copying to channel: {e}")
-        await message.reply("Не удалось сохранить мем. Возможно, я не являюсь администратором в канале или ID канала указан неверно.")
+        await processing_msg.edit_text("Не удалось сохранить мем. Возможно, я не являюсь администратором в канале или формат не поддерживается.")
 
 # ================= СОБЫТИЯ (EVENTS) =================
 

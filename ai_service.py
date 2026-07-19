@@ -8,16 +8,33 @@ if config.GEMINI_API_KEY:
 else:
     client = None
 
+# Настройки безопасности: отключаем фильтры цензуры, чтобы бот не "глотал" жесткие мемы
+safety_settings = [
+    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+]
+
 async def is_political(image_bytes: bytes, mime_type: str = 'image/jpeg') -> bool:
     if not client: return False
-    prompt = "Ты - строгий ИИ-модератор. Проанализируй это изображение (и любой текст на нем). Есть ли здесь политический подтекст, изображения политических деятелей, отсылки к государственным органам, выборам, законам, войне или оппозиции? Ответь строго одним словом: ДА или НЕТ."
+    prompt = (
+        "Ты - строгий ИИ-модератор. Внимательно изучи каждый пиксель, даже если это мыльный скриншот или обрезанная картинка. "
+        "Есть ли здесь любой политический подтекст, лица или фигуры политических деятелей (Путин, Байден и т.д.), "
+        "отсылки к государственным органам, выборам, законам, войне, флагам или оппозиции? "
+        "Ответь строго одним словом: ДА или НЕТ."
+    )
     try:
         response = await client.aio.models.generate_content(
             model='gemini-3.5-flash',
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.0, # Нулевая креативность для строгой проверки
+                safety_settings=safety_settings
+            )
         )
         text = response.text.strip().lower()
         return 'да' in text or 'yes' in text
@@ -34,7 +51,11 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                safety_settings=safety_settings
+            )
         )
         text = response.text
         # Превращаем маркдаун-звездочки в HTML-жирность
@@ -53,7 +74,11 @@ async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.9,
+                safety_settings=safety_settings
+            )
         )
         text = response.text
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
@@ -71,7 +96,11 @@ async def vibe_check(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.8,
+                safety_settings=safety_settings
+            )
         )
         text = response.text
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)

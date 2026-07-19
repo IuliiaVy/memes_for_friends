@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import random
+import aiohttp
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, BotCommand
 from aiogram.filters import Command
@@ -139,16 +140,24 @@ async def welcome_new_members(message: Message):
 # ================= ОБЩИЕ ФИЛЬТРЫ (TEXT/PHOTO) =================
 # Эти фильтры должны идти в самом конце, иначе они перехватят команды!
 
-@dp.message(F.photo)
-async def handle_photo(message: Message):
+@dp.message(F.photo | F.sticker)
+async def handle_media(message: Message):
     # 1. Check text caption for bad cat name
     if message.caption and BAD_CAT_NAME_PATTERN.search(message.caption):
         await message.delete()
         await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
         return
+        
+    # Skip animated/video stickers for AI checks
+    if message.sticker and (message.sticker.is_animated or message.sticker.is_video):
+        return
 
     # Download image bytes
-    image_bytes = await download_image(message)
+    try:
+        image_bytes = await download_image(message)
+    except Exception as e:
+        print(f"Failed to download media: {e}")
+        return
     
     # 2. Check for political content
     is_pol = await is_political(image_bytes)
@@ -205,6 +214,19 @@ async def start_web_server():
     await site.start()
     print(f"Web server started on port {port}")
 
+async def keep_alive():
+    """Фоновая задача, которая пингует собственный веб-сервер каждые 10 минут, чтобы Render не усыплял бота."""
+    url = "https://meme-sheriff-bot.onrender.com/"
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    print(f"Self-ping successful: {response.status}")
+        except Exception as e:
+            print(f"Self-ping failed: {e}")
+        # Ждем 10 минут (600 секунд)
+        await asyncio.sleep(600)
+
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command="brigada", description="Вызвать пояснительную бригаду для мема"),
@@ -220,6 +242,8 @@ async def main():
     await set_commands(bot)
     # Запускаем веб-сервер параллельно с поллингом телеграм-бота
     asyncio.create_task(start_web_server())
+    # Запускаем пинг самого себя, чтобы Render не спал
+    asyncio.create_task(keep_alive())
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

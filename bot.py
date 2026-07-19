@@ -204,7 +204,8 @@ async def handle_text(message: Message):
         return
         
     if message.chat.type == "private":
-        await message.reply("Шериф на дежурстве. 🤠\nЯ слежу за порядком в группах. В личке я просто так не болтаю, но если скинешь мне мем — я его прожарю! Подробнее про мои команды жми /help.")
+        phrase = random.choice(SHERIFF_PHRASES)
+        await message.reply(f"{phrase}\n\n*(Кстати, скинь мне мем — и я его прожарю! Команды: /help)*", parse_mode="Markdown")
 
 # ================= ВЕБ-СЕРВЕР (ДЛЯ RENDER) =================
 

@@ -187,8 +187,8 @@ async def handle_media(message: Message):
         await message.answer(f"@{message.from_user.username}, мем конфискован. Оставим политику для новостей.")
         return
 
-    # 3. Random meme roast (1 in 20 chance)
-    if random.randint(1, 20) == 1:
+    # 3. Random meme roast (1 in 20 chance in group, ALWAYS in private)
+    if message.chat.type == "private" or random.randint(1, 20) == 1:
         roast = await roast_meme(image_bytes)
         await message.reply(roast)
 
@@ -201,6 +201,10 @@ async def handle_text(message: Message):
         
     if "@meme_sheriff_bot" in message.text:
         await message.reply(random.choice(SHERIFF_PHRASES))
+        return
+        
+    if message.chat.type == "private":
+        await message.reply("Шериф на дежурстве. 🤠\nЯ слежу за порядком в группах. В личке я просто так не болтаю, но если скинешь мне мем — я его прожарю! Подробнее про мои команды жми /help.")
 
 # ================= ВЕБ-СЕРВЕР (ДЛЯ RENDER) =================
 
@@ -253,7 +257,11 @@ async def main():
     asyncio.create_task(start_web_server())
     # Запускаем пинг самого себя, чтобы Render не спал
     asyncio.create_task(keep_alive())
-    await dp.start_polling(bot)
+    
+    # Игнорируем старые апдейты, чтобы избежать конфликтов (TelegramConflictError)
+    # при перезагрузке серверов Render
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 if __name__ == "__main__":
     asyncio.run(main())

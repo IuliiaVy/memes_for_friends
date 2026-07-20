@@ -71,7 +71,7 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
 
 async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
     if not client: return "Я бы прожарил этот мем, но у меня нет API ключа."
-    prompt = "Напиши короткую, саркастичную, токсичную (но дружелюбную) рецензию на этот мем на русском языке. Максимум 2 предложения. Сделай вид, что ты элитарный критик мемов."
+    prompt = "Подшути над этим мемом в стиле сурового, слегка ворчливого шерифа Дикого Запада. Используй легкий сарказм, ковбойский сленг и иронию, но БЕЗ грубости, токсичности или реальных оскорблений. Максимум 2 предложения. Должно быть смешно, а не обидно."
     try:
         response = await client.aio.models.generate_content(
             model='gemini-3.5-flash',

@@ -160,6 +160,25 @@ async def cmd_post_to_best(message: Message):
         print(f"Error copying to channel: {e}")
         await processing_msg.edit_text("Не удалось сохранить мем. Возможно, я не являюсь администратором в канале или формат не поддерживается.")
 
+@dp.message(Command("survey"))
+async def cmd_survey(message: Message):
+    """Отправляет опрос для сбора фидбека (Smoke Test из Lean UX Canvas)"""
+    if str(message.from_user.id) != str(config.ADMIN_CHAT_ID):
+        await message.reply("Только мэр этого города (админ) может запускать опросы.")
+        return
+        
+    await message.answer_poll(
+        question="Опрос от Шерифа: Я не слишком навязчивый со своими прожарками на этой неделе?",
+        options=[
+            "Всё супер, жги еще! 🤠",
+            "Нормально, но можно чуть реже.",
+            "Ты меня бесишь, шериф. Угомонись! 🤬",
+            "Я вообще не понимаю, кто ты такой."
+        ],
+        is_anonymous=True,
+        allows_multiple_answers=False
+    )
+
 # ================= СОБЫТИЯ (EVENTS) =================
 
 @dp.message(F.new_chat_members)
@@ -273,6 +292,7 @@ async def set_commands(bot: Bot):
         BotCommand(command="brigada", description="Вызвать пояснительную бригаду для мема"),
         BotCommand(command="vibe_check", description="Проверить ауру (вайб) мема"),
         BotCommand(command="post_to_best", description="Отправить мем на главную доску"),
+        BotCommand(command="survey", description="Запустить опрос о качестве бота (для админа)"),
         BotCommand(command="help", description="Показать правила Шерифа")
     ]
     await bot.set_my_commands(commands)

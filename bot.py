@@ -293,7 +293,6 @@ async def set_commands(bot: Bot):
         BotCommand(command="brigada", description="Вызвать пояснительную бригаду для мема"),
         BotCommand(command="vibe_check", description="Проверить ауру (вайб) мема"),
         BotCommand(command="post_to_best", description="Отправить мем на главную доску"),
-        BotCommand(command="survey", description="Запустить опрос о качестве бота (для админа)"),
         BotCommand(command="help", description="Показать правила Шерифа")
     ]
     await bot.set_my_commands(commands)

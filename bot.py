@@ -197,11 +197,11 @@ async def welcome_new_members(message: Message):
 
 @dp.message(F.photo | F.sticker)
 async def handle_media(message: Message):
-    # 1. Check text caption for bad cat name
-    if message.caption and BAD_CAT_NAME_PATTERN.search(message.caption):
-        await message.delete()
-        await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
-        return
+    # 1. Check text caption for bad cat name (TEMPORARILY DISABLED)
+    # if message.caption and BAD_CAT_NAME_PATTERN.search(message.caption):
+    #     await message.delete()
+    #     await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
+    #     return
         
     # Skip animated/video stickers for AI checks
     if message.sticker and (message.sticker.is_animated or message.sticker.is_video):
@@ -240,10 +240,11 @@ async def handle_media(message: Message):
 
 @dp.message(F.text)
 async def handle_text(message: Message):
-    if BAD_CAT_NAME_PATTERN.search(message.text):
-        await message.delete()
-        await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
-        return
+    # TEMPORARILY DISABLED
+    # if BAD_CAT_NAME_PATTERN.search(message.text):
+    #     await message.delete()
+    #     await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
+    #     return
         
     if "@meme_sheriff_bot" in message.text:
         await message.reply(random.choice(SHERIFF_PHRASES))

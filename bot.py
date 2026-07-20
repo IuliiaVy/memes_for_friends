@@ -89,6 +89,10 @@ async def cmd_brigada(message: Message):
     if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.sticker):
         await message.reply("Ответьте этой командой на сообщение с картинкой или стикером.")
         return
+        
+    if message.reply_to_message.sticker and (message.reply_to_message.sticker.is_animated or message.reply_to_message.sticker.is_video):
+        await message.reply("Я не умею анализировать анимированные или видео-стикеры. Дайте мне обычную картинку!")
+        return
     
     processing_msg = await message.reply("Вызываю пояснительную бригаду ИИ...")
     try:
@@ -106,6 +110,10 @@ async def cmd_vibe_check(message: Message):
     if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.sticker):
         await message.reply("Ответьте этой командой на сообщение с картинкой или стикером.")
         return
+        
+    if message.reply_to_message.sticker and (message.reply_to_message.sticker.is_animated or message.reply_to_message.sticker.is_video):
+        await message.reply("Анимированные стикеры слишком быстрые, я не успеваю считать их вайб. Выберите статичный!")
+        return
     
     processing_msg = await message.reply("Сканирую ауру мема...")
     try:
@@ -122,6 +130,10 @@ async def cmd_post_to_best(message: Message):
     """
     if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.sticker):
         await message.reply("Ответьте этой командой на мем или стикер, который хотите вывесить на главную доску.")
+        return
+        
+    if message.reply_to_message.sticker and (message.reply_to_message.sticker.is_animated or message.reply_to_message.sticker.is_video):
+        await message.reply("Анимированные стикеры на доску не вешаем. Только старая добрая классика!")
         return
     
     if not config.CHANNEL_ID:

@@ -4,12 +4,15 @@ import re
 import random
 import aiohttp
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, BotCommand
+from aiogram.types import Message, BotCommand, LabeledPrice, PreCheckoutQuery, SuccessfulPayment, CallbackQuery
 from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 import config
 from ai_service import is_political, explain_meme, roast_meme, vibe_check
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import db
 
 if not config.BOT_TOKEN:
     print("No BOT_TOKEN. Exiting.")
@@ -18,6 +21,85 @@ if not config.BOT_TOKEN:
 # Initialize bot with default parse mode
 bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
+
+MAX_MESSAGE_ID = 0
+
+async def get_max_message_id():
+    global MAX_MESSAGE_ID
+    if MAX_MESSAGE_ID == 0 and config.MAIN_GROUP_ID:
+        try:
+            msg = await bot.send_message(chat_id=config.MAIN_GROUP_ID, text=".", disable_notification=True)
+            MAX_MESSAGE_ID = msg.message_id
+            await msg.delete()
+        except Exception:
+            pass
+    return MAX_MESSAGE_ID
+
+async def retro_moderation_job():
+    print("Starting retro moderation job...")
+    if not config.MAIN_GROUP_ID or not config.ADMIN_CHAT_ID:
+        print("MAIN_GROUP_ID or ADMIN_CHAT_ID not configured.")
+        return
+        
+    max_id = await get_max_message_id()
+    if not max_id:
+        return
+        
+    # Попробуем 100 раз найти картинку
+    for _ in range(100):
+        random_id = random.randint(1, max_id)
+        try:
+            # Пересылаем в админский чат
+            msg = await bot.forward_message(
+                chat_id=config.ADMIN_CHAT_ID, 
+                from_chat_id=config.MAIN_GROUP_ID, 
+                message_id=random_id, 
+                disable_notification=True
+            )
+            
+            # Если это картинка, обрабатываем
+            if msg.photo:
+                caption = msg.caption or ""
+                # Если это нюдсочетверг - пропускаем
+                if "#нюдсочетверг" in caption.lower():
+                    await bot.delete_message(chat_id=config.ADMIN_CHAT_ID, message_id=msg.message_id)
+                    continue
+                
+                # Загружаем
+                image_bytes = await download_image(msg)
+                
+                # Удаляем из админки
+                await bot.delete_message(chat_id=config.ADMIN_CHAT_ID, message_id=msg.message_id)
+                
+                # Проверяем политику
+                is_pol = await is_political(image_bytes)
+                if is_pol:
+                    # Удаляем оригинал!
+                    try:
+                        await bot.delete_message(chat_id=config.MAIN_GROUP_ID, message_id=random_id)
+                        await bot.send_message(chat_id=config.ADMIN_CHAT_ID, text=f"🚨 Удалил старый политический мем (ID: {random_id}) из архивов!")
+                    except Exception as e:
+                        print(f"Failed to delete original: {e}")
+                else:
+                    # Постим в группу
+                    try:
+                        await bot.copy_message(
+                            chat_id=config.MAIN_GROUP_ID,
+                            from_chat_id=config.MAIN_GROUP_ID,
+                            message_id=random_id,
+                            caption="🤠 Покопался в архивах и нашел этот шедевр из прошлого. Кто помнит, чей это был вайб?"
+                        )
+                    except Exception:
+                        pass
+                return # Успешно обработали один мем, выходим
+                
+            else:
+                # Не картинка, удаляем буфер
+                await bot.delete_message(chat_id=config.ADMIN_CHAT_ID, message_id=msg.message_id)
+                
+        except Exception as e:
+            # Сообщение не существует или удалено
+            pass
 
 # Regex for bad cat name
 BAD_CAT_NAME_PATTERN = re.compile(r'\b(пиздюк|пездюк|пестдюк|писдюк)[а-я]*\b', re.IGNORECASE)
@@ -197,11 +279,12 @@ async def welcome_new_members(message: Message):
 
 @dp.message(F.photo | F.sticker)
 async def handle_media(message: Message):
+    # Check for #нюдсочетверг exception
+    caption = message.caption or ""
+    if "#нюдсочетверг" in caption.lower():
+        return
+        
     # 1. Check text caption for bad cat name (TEMPORARILY DISABLED)
-    # if message.caption and BAD_CAT_NAME_PATTERN.search(message.caption):
-    #     await message.delete()
-    #     await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
-    #     return
         
     # Skip animated/video stickers for AI checks
     if message.sticker and (message.sticker.is_animated or message.sticker.is_video):
@@ -233,13 +316,56 @@ async def handle_media(message: Message):
         await message.answer(f"@{message.from_user.username}, мем конфискован. Оставим политику для новостей.")
         return
 
-    # 3. Random meme roast (1 in 20 chance in group, ALWAYS in private)
-    if message.chat.type == "private" or random.randint(1, 20) == 1:
+    # 3. Random meme roast in group or DB logic in private
+    if message.chat.type == "private":
+        user_id = message.from_user.id
+        user = await db.get_or_create_user(user_id)
+        
+        if user['free_checks_used'] < 5:
+            await db.use_free_check(user_id)
+            checks_left = 4 - user['free_checks_used']
+            processing_msg = await message.reply(f"Проверяю... (Осталось бесплатных проверок сегодня: {checks_left})")
+        elif user['stars_balance'] > 0:
+            await db.use_star(user_id)
+            processing_msg = await message.reply(f"Проверяю... (Потрачена 1 ⭐️. Остаток: {user['stars_balance'] - 1} ⭐️)")
+        else:
+            # Need to buy stars
+            prices = [LabeledPrice(label="1 Проверка", amount=1)]
+            await bot.send_invoice(
+                chat_id=message.chat.id,
+                title="Дополнительная проверка мема",
+                description="Бесплатные проверки (5/день) закончились. Купи проверку за 1 Telegram Star, чтобы продолжить.",
+                payload="buy_1_check",
+                provider_token="", # Empty for Telegram Stars
+                currency="XTR",
+                prices=prices
+            )
+            return
+
+        roast = await roast_meme(image_bytes)
+        
+        builder = InlineKeyboardBuilder()
+        dispute_text = random.choice([
+            "Шериф, ты не так понял! 🫣",
+            "Я могу всё объяснить... 🤠",
+            "Шериф, протри очки! 👓",
+            "Это подстава! Я буду жаловаться мэру 📜"
+        ])
+        builder.button(text=dispute_text, callback_data=f"dispute_{message.message_id}")
+        
+        await processing_msg.edit_text(roast, reply_markup=builder.as_markup())
+        
+    elif random.randint(1, 20) == 1:
         roast = await roast_meme(image_bytes)
         await message.reply(roast)
 
 @dp.message(F.text)
 async def handle_text(message: Message):
+    global MAX_MESSAGE_ID
+    if str(message.chat.id) == str(config.MAIN_GROUP_ID):
+        if message.message_id > MAX_MESSAGE_ID:
+            MAX_MESSAGE_ID = message.message_id
+            
     # TEMPORARILY DISABLED
     # if BAD_CAT_NAME_PATTERN.search(message.text):
     #     await message.delete()
@@ -252,7 +378,40 @@ async def handle_text(message: Message):
         
     if message.chat.type == "private":
         phrase = random.choice(SHERIFF_PHRASES)
-        await message.reply(f"{phrase}\n\n*(Кстати, скинь мне мем — и я его прожарю! Команды: /help)*", parse_mode="Markdown")
+        await message.reply(f"{phrase}\n\n*(Кстати, скинь мне мем — и я его прожарю! Первые 5 раз в день бесплатно)*", parse_mode="Markdown")
+
+# ================= ПЛАТЕЖИ И ЖАЛОБЫ =================
+
+@dp.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@dp.message(F.successful_payment)
+async def successful_payment_handler(message: Message):
+    user_id = message.from_user.id
+    await db.add_stars(user_id, 1)
+    await message.answer("Оплата прошла успешно! ⭐️ зачислена на твой баланс. Можешь присылать следующий мем.")
+
+@dp.callback_query(F.data.startswith("dispute_"))
+async def dispute_callback(callback: CallbackQuery):
+    message_id = callback.data.split("_")[1]
+    
+    if config.ADMIN_CHAT_ID:
+        try:
+            await bot.forward_message(
+                chat_id=config.ADMIN_CHAT_ID,
+                from_chat_id=callback.message.chat.id,
+                message_id=int(message_id)
+            )
+            await bot.send_message(
+                chat_id=config.ADMIN_CHAT_ID,
+                text=f"🚨 ЖАЛОБА от @{callback.from_user.username or callback.from_user.id}:\n\nБот ответил:\n{callback.message.text}"
+            )
+        except Exception as e:
+            print(f"Failed to forward dispute: {e}")
+            
+    await callback.answer("Я передал твою жалобу мэру. Если бот ошибся, его починят!", show_alert=True)
+    await callback.message.edit_reply_markup(reply_markup=None)
 
 # ================= ВЕБ-СЕРВЕР (ДЛЯ RENDER) =================
 
@@ -299,8 +458,17 @@ async def set_commands(bot: Bot):
 
 async def main():
     print("Meme Police Bot started")
+    # Инициализация БД
+    await db.init_db()
+    
     # Регистрируем команды в меню Telegram
     await set_commands(bot)
+    
+    # Инициализация и запуск шедулера
+    scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
+    scheduler.add_job(retro_moderation_job, 'cron', hour=12, minute=0)
+    scheduler.start()
+    
     # Запускаем веб-сервер параллельно с поллингом телеграм-бота
     asyncio.create_task(start_web_server())
     # Запускаем пинг самого себя, чтобы Render не спал

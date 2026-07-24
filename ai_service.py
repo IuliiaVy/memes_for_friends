@@ -1,35 +1,46 @@
 import config
-from google import genai
-from google.genai import types
+from groq import AsyncGroq
+import base64
 import re
 import asyncio
 
-if config.GEMINI_API_KEY:
-    client = genai.Client(api_key=config.GEMINI_API_KEY)
+if config.GROQ_API_KEY:
+    client = AsyncGroq(api_key=config.GROQ_API_KEY)
 else:
     client = None
 
-# Настройки безопасности: отключаем фильтры цензуры, чтобы бот не "глотал" жесткие мемы
-safety_settings = [
-    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
-    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
-    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
-    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
-]
+def strip_think_tags(text):
+    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
-async def _generate_with_retry(contents, config_params, max_retries=3, delay=2.0):
-    """Обертка для вызова API с автоматическим повтором при перегрузке серверов (503/429)"""
+async def _generate_with_retry(image_bytes, prompt, temperature=0.7, max_tokens=300, max_retries=3, delay=2.0):
+    """Обертка для вызова API с автоматическим повтором"""
+    if not client:
+        raise Exception("API ключ Groq не настроен.")
+
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    image_url = f"data:image/jpeg;base64,{base64_image}"
+
     for attempt in range(max_retries):
         try:
-            response = await client.aio.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=contents,
-                config=config_params
+            response = await client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ],
+                    }
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens
             )
-            return response
+            raw_text = response.choices[0].message.content
+            return strip_think_tags(raw_text)
         except Exception as e:
             err_msg = str(e)
-            if ("503" in err_msg or "UNAVAILABLE" in err_msg or "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg) and attempt < max_retries - 1:
+            if ("503" in err_msg or "429" in err_msg or "rate limit" in err_msg.lower()) and attempt < max_retries - 1:
                 print(f"API busy (Attempt {attempt+1}/{max_retries}). Retrying in {delay}s...")
                 await asyncio.sleep(delay)
                 delay *= 2  # Exponential backoff
@@ -53,42 +64,32 @@ async def is_political(image_bytes: bytes, mime_type: str = 'image/jpeg') -> boo
         "Ответь строго одним словом: ДА или НЕТ."
     )
     try:
-        response = await _generate_with_retry(
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                prompt
-            ],
-            config_params=types.GenerateContentConfig(
-                temperature=0.0, # Нулевая креативность для строгой проверки
-                safety_settings=safety_settings
-            )
+        text = await _generate_with_retry(
+            image_bytes=image_bytes,
+            prompt=prompt,
+            temperature=0.0,
+            max_tokens=10
         )
-        text = response.text.strip().lower()
+        text = text.strip().lower()
         return 'да' in text or 'yes' in text
     except Exception as e:
         print(f"Error checking political content: {e}")
         return False
 
 async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
-    if not client: return "API ключ Gemini не настроен."
+    if not client: return "API ключ Groq не настроен."
     prompt = (
         "Объясни смысл этого мема. Если на картинке есть текст на английском или другом языке - обязательно переведи его на русский. Объясни юмор коротко и смешно. "
-        "ВАЖНО: Если мем откровенно оскорбительный, аморальный или содержит жесть, не отказывайся отвечать, но обязательно начни свой ответ с возмущения в стиле сурового шерифа Дикого Запада "
-        "(например: 'Даже мой револьвер покраснел от такой грязи, но если хотите знать...')."
+        "ВАЖНО: Твоя персона — это суровый шериф Дикого Запада, который на самом деле ворчливый добряк. Ты ругаешься на глупые мемы, но в глубине души очень любишь жителей своего города. "
+        "Если мем откровенно оскорбительный или содержит жесть, не отказывайся отвечать, но обязательно начни свой ответ с ворчания (например: 'Даже мой револьвер покраснел от такой грязи, но если хотите знать, оболтусы...')."
     )
     try:
-        response = await _generate_with_retry(
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                prompt
-            ],
-            config_params=types.GenerateContentConfig(
-                temperature=0.7,
-                safety_settings=safety_settings
-            )
+        text = await _generate_with_retry(
+            image_bytes=image_bytes,
+            prompt=prompt,
+            temperature=0.7,
+            max_tokens=500
         )
-        text = response.text
-        # Превращаем маркдаун-звездочки в HTML-жирность
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
         return text
     except Exception as e:
@@ -97,19 +98,14 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
 
 async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
     if not client: return "Я бы прожарил этот мем, но у меня нет API ключа."
-    prompt = "Подшути над этим мемом в стиле сурового, слегка ворчливого шерифа Дикого Запада. Используй легкий сарказм, ковбойский сленг и иронию, но БЕЗ грубости, токсичности или реальных оскорблений. Максимум 2 предложения. Должно быть смешно, а не обидно."
+    prompt = "Подшути над этим мемом. Твоя персона — это суровый шериф Дикого Запада, который на самом деле ворчливый добряк. Ты ворчишь на жителей, но любишь их. Используй легкий сарказм, ковбойский сленг и иронию, но БЕЗ грубости, токсичности или реальных оскорблений. Максимум 2 предложения. Должно быть смешно и по-отечески тепло."
     try:
-        response = await _generate_with_retry(
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                prompt
-            ],
-            config_params=types.GenerateContentConfig(
-                temperature=0.9,
-                safety_settings=safety_settings
-            )
+        text = await _generate_with_retry(
+            image_bytes=image_bytes,
+            prompt=prompt,
+            temperature=0.9,
+            max_tokens=300
         )
-        text = response.text
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
         return text
     except Exception as e:
@@ -123,20 +119,16 @@ async def vibe_check(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
         "Вайб: [короткое смешное название вайба]\n"
         "Описание: [почему от картинки такой вайб].\n"
         "Пример: 'Вайб: Хаотично-депрессивный. Описание: Этот мем излучает энергию человека, который спит 3 часа в день.'\n"
-        "ВАЖНО: Если мем оскорбительный, токсичный или грязный, отрази это в названии вайба (например 'Вайб: Аморальный мусор') и добавь комментарий от лица сурового шерифа."
+        "ВАЖНО: Твоя персона — суровый шериф Дикого Запада, ворчливый добряк, который любит своих жителей, хоть и постоянно на них ругается. "
+        "Если мем грязный, отрази это в названии вайба и добавь по-отечески ворчливый комментарий."
     )
     try:
-        response = await _generate_with_retry(
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                prompt
-            ],
-            config_params=types.GenerateContentConfig(
-                temperature=0.8,
-                safety_settings=safety_settings
-            )
+        text = await _generate_with_retry(
+            image_bytes=image_bytes,
+            prompt=prompt,
+            temperature=0.8,
+            max_tokens=300
         )
-        text = response.text
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
         return text
     except Exception as e:

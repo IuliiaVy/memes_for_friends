@@ -172,6 +172,16 @@ async def cmd_start_help(message: Message):
     """
     await message.reply(WELCOME_TEXT)
 
+async def safe_edit_text(processing_msg: Message, text: str, reply_markup=None):
+    try:
+        await processing_msg.edit_text(text, reply_markup=reply_markup)
+    except Exception as e:
+        print(f"Failed edit_text with HTML parse mode: {e}")
+        try:
+            await processing_msg.edit_text(text, reply_markup=reply_markup, parse_mode=None)
+        except Exception as e2:
+            print(f"Failed edit_text completely: {e2}")
+
 @dp.message(Command("brigada"))
 async def cmd_brigada(message: Message):
     if not message.reply_to_message or not (message.reply_to_message.photo or message.reply_to_message.sticker):
@@ -186,9 +196,9 @@ async def cmd_brigada(message: Message):
     try:
         image_bytes = await download_image(message.reply_to_message)
         explanation = await explain_meme(image_bytes)
-        await processing_msg.edit_text(explanation)
+        await safe_edit_text(processing_msg, explanation)
     except Exception as e:
-        await processing_msg.edit_text("Произошла ошибка при анализе мема.")
+        await safe_edit_text(processing_msg, "Произошла ошибка при анализе мема.")
 
 @dp.message(Command("vibe_check"))
 async def cmd_vibe_check(message: Message):
@@ -207,9 +217,9 @@ async def cmd_vibe_check(message: Message):
     try:
         image_bytes = await download_image(message.reply_to_message)
         vibe = await vibe_check(image_bytes)
-        await processing_msg.edit_text(vibe)
+        await safe_edit_text(processing_msg, vibe)
     except Exception as e:
-        await processing_msg.edit_text("Не удалось просканировать вайб. Слишком много помех.")
+        await safe_edit_text(processing_msg, "Не удалось просканировать вайб. Слишком много помех.")
 
 @dp.message(Command("post_to_best"))
 async def cmd_post_to_best(message: Message):
@@ -235,7 +245,7 @@ async def cmd_post_to_best(message: Message):
         is_pol = await is_political(image_bytes)
         
         if is_pol:
-            await processing_msg.edit_text("Отказано. Этот мем содержит политику, жесть или запрещенный контент. На главную доску такое не вешаем.")
+            await safe_edit_text(processing_msg, "Отказано. Этот мем содержит политику, жесть или запрещенный контент. На главную доску такое не вешаем.")
             return
             
         await bot.copy_message(
@@ -243,10 +253,10 @@ async def cmd_post_to_best(message: Message):
             from_chat_id=message.chat.id,
             message_id=message.reply_to_message.message_id
         )
-        await processing_msg.edit_text("Шедевр вывешен на главную доску! 📜")
+        await safe_edit_text(processing_msg, "Шедевр вывешен на главную доску! 📜")
     except Exception as e:
         print(f"Error copying to channel: {e}")
-        await processing_msg.edit_text("Не удалось сохранить мем. Возможно, я не являюсь администратором в канале или формат не поддерживается.")
+        await safe_edit_text(processing_msg, "Не удалось сохранить мем. Возможно, я не являюсь администратором в канале или формат не поддерживается.")
 
 @dp.message(Command("survey"))
 async def cmd_survey(message: Message):
@@ -359,15 +369,7 @@ async def handle_media(message: Message):
         ])
         builder.button(text=dispute_text, callback_data=f"dispute_{message.message_id}")
         
-        try:
-            await processing_msg.edit_text(roast, reply_markup=builder.as_markup())
-        except Exception as e:
-            print(f"Failed to edit text (maybe invalid HTML): {e}")
-            try:
-                # Попробуем отправить как обычный текст без парсинга HTML, если ИИ выдал кривую разметку
-                await processing_msg.edit_text(roast, reply_markup=builder.as_markup(), parse_mode=None)
-            except Exception as e2:
-                await processing_msg.edit_text("Мем настолько суров, что сломал телеграм. Попробуйте еще раз.")
+        await safe_edit_text(processing_msg, roast, reply_markup=builder.as_markup())
         
     elif random.randint(1, 20) == 1:
         roast = await roast_meme(image_bytes)
@@ -386,7 +388,8 @@ async def handle_text(message: Message):
     #     await message.answer("Воздержитесь от подобных оскорблений. Кошку зовут Маркиза, проявляйте уважение. P.S. Сам пиздюк ⚡")
     #     return
         
-    if "@meme_sheriff_bot" in message.text:
+    bot_me = await bot.get_me()
+    if f"@{bot_me.username}" in message.text:
         await message.reply(random.choice(SHERIFF_PHRASES))
         return
         
@@ -450,7 +453,7 @@ async def start_web_server():
 
 async def keep_alive():
     """Фоновая задача, которая пингует собственный веб-сервер каждые 10 минут, чтобы Render не усыплял бота."""
-    url = "https://meme-sheriff-bot.onrender.com/"
+    url = os.environ.get("RENDER_EXTERNAL_URL") or "https://meme-sheriff-bot-1.onrender.com/"
     while True:
         try:
             async with aiohttp.ClientSession() as session:

@@ -3,6 +3,7 @@ from groq import AsyncGroq
 import base64
 import re
 import asyncio
+import html
 
 if config.GROQ_API_KEY:
     client = AsyncGroq(api_key=config.GROQ_API_KEY)
@@ -11,6 +12,12 @@ else:
 
 def strip_think_tags(text):
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+
+def format_telegram_html(text: str) -> str:
+    """Безопасно экранирует спецсимволы HTML и форматирует **текст** в <b>текст</b>"""
+    text = html.escape(text)
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    return text
 
 async def _generate_with_retry(image_bytes, prompt, temperature=0.7, max_tokens=300, max_retries=3, delay=2.0):
     """Обертка для вызова API с автоматическим повтором"""
@@ -90,8 +97,7 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
             temperature=0.7,
             max_tokens=500
         )
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-        return text
+        return format_telegram_html(text)
     except Exception as e:
         print(f"Error explaining meme: {e}")
         return "Не удалось объяснить мем. Мои нейроны запутались."
@@ -106,8 +112,7 @@ async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
             temperature=0.9,
             max_tokens=300
         )
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-        return text
+        return format_telegram_html(text)
     except Exception as e:
         print(f"Error roasting meme: {e}")
         return "Мем настолько плох, что у меня сломался процессор."
@@ -129,8 +134,7 @@ async def vibe_check(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
             temperature=0.8,
             max_tokens=300
         )
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-        return text
+        return format_telegram_html(text)
     except Exception as e:
         print(f"Error checking vibe: {e}")
         return "Не могу проверить вайб. Мои нейроны не настроились на эту волну."

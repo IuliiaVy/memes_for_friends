@@ -359,7 +359,15 @@ async def handle_media(message: Message):
         ])
         builder.button(text=dispute_text, callback_data=f"dispute_{message.message_id}")
         
-        await processing_msg.edit_text(roast, reply_markup=builder.as_markup())
+        try:
+            await processing_msg.edit_text(roast, reply_markup=builder.as_markup())
+        except Exception as e:
+            print(f"Failed to edit text (maybe invalid HTML): {e}")
+            try:
+                # Попробуем отправить как обычный текст без парсинга HTML, если ИИ выдал кривую разметку
+                await processing_msg.edit_text(roast, reply_markup=builder.as_markup(), parse_mode=None)
+            except Exception as e2:
+                await processing_msg.edit_text("Мем настолько суров, что сломал телеграм. Попробуйте еще раз.")
         
     elif random.randint(1, 20) == 1:
         roast = await roast_meme(image_bytes)

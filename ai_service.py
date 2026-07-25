@@ -25,7 +25,7 @@ def format_telegram_html(text: str) -> str:
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
     return text
 
-async def _generate_with_retry(image_bytes, prompt, temperature=0.7, max_tokens=600, max_retries=3, delay=2.0):
+async def _generate_with_retry(image_bytes, prompt, temperature=0.7, max_tokens=800, max_retries=3, delay=2.0):
     """Обертка для вызова API с автоматическим повтором"""
     if not client:
         raise Exception("API ключ Groq не настроен.")
@@ -63,7 +63,7 @@ async def _generate_with_retry(image_bytes, prompt, temperature=0.7, max_tokens=
 async def is_political(image_bytes: bytes, mime_type: str = 'image/jpeg') -> bool:
     if not client: return False
     prompt = (
-        "Ты — модератор дружеского чата. Оценивай картинку на предмет реального политического контекста.\n\n"
+        "Ты — модератор дружеского чата. Рассуждай кратко (до 5 слов в <think>). Оценивай картинку на предмет реального политического контекста.\n\n"
         "Отвечай 'ДА' (заблокировать) для актуальной политики, государственных деятелей (Путин, Байден, Зеленский, Трамп), настоящей агитации, призывов и современных войн.\n\n"
         "Отвечай 'НЕТ' (пропустить) для ситуативного юмора, мемов, игр, кино, мультфильмов, случайных флагов, исторических личностей (Наполеон, Цезарь) и бытовых тем.\n\n"
         "Пиши все свои мысли и итоговый ответ исключительно на русском языке.\n"
@@ -74,7 +74,7 @@ async def is_political(image_bytes: bytes, mime_type: str = 'image/jpeg') -> boo
             image_bytes=image_bytes,
             prompt=prompt,
             temperature=0.0,
-            max_tokens=20
+            max_tokens=100
         )
         text = text.strip().lower()
         return 'да' in text or 'yes' in text
@@ -86,6 +86,7 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
     if not client: return "API ключ Groq не настроен."
     prompt = (
         "Ты — суровый Шериф Дикого Запада, который на самом деле является ворчливым добряком и очень любит жителей своего города. "
+        "Рассуждай кратко (до 10 слов в <think>). "
         "Объясни смысл этого мема коротко и понятными словами. Если на картинке есть текст на иностранном языке, переведи его на русский язык. "
         "Начни свой ответ с легкого ковбойского ворчания, за которым следует заботливое объяснение юмора. "
         "Пиши все свои мысли, рассуждения и итоговый текст исключительно на русском языке от начала и до конца."
@@ -95,7 +96,7 @@ async def explain_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str
             image_bytes=image_bytes,
             prompt=prompt,
             temperature=0.7,
-            max_tokens=600
+            max_tokens=1000
         )
         return format_telegram_html(text)
     except Exception as e:
@@ -106,6 +107,7 @@ async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
     if not client: return "Я бы прожарил этот мем, но у меня нет API ключа."
     prompt = (
         "Ты — суровый Шериф Дикого Запада, ворчливый добряк. "
+        "Рассуждай кратко (до 10 слов в <think>). "
         "Твой ответ — это короткая (ровно 1–2 предложения), по-отечески теплая и добродушная шутка. "
         "Выражай дружескую иронию исключительно к ситуации на картинке, поддерживая автора и сохраняя уютный ковбойский вайб. "
         "Пиши все свои мысли, рассуждения и итоговый текст исключительно на русском языке от начала и до конца."
@@ -115,7 +117,7 @@ async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
             image_bytes=image_bytes,
             prompt=prompt,
             temperature=0.9,
-            max_tokens=400
+            max_tokens=1000
         )
         return format_telegram_html(text)
     except Exception as e:
@@ -125,6 +127,8 @@ async def roast_meme(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
 async def vibe_check(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
     if not client: return "Я бы проверил вайб, но нет ключа."
     prompt = (
+        "Ты — суровый Шериф Дикого Запада, ворчливый добряк. "
+        "Рассуждай кратко (до 10 слов в <think>). "
         "Проведи 'vibe check' (проверку вайба) этого мема. Выдай результат ровно в двух коротких строках:\n"
         "Вайб: [2-3 слова]\n"
         "Аура: [короткая фраза на 4-7 слов].\n"
@@ -136,7 +140,7 @@ async def vibe_check(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
             image_bytes=image_bytes,
             prompt=prompt,
             temperature=0.8,
-            max_tokens=300
+            max_tokens=1000
         )
         return format_telegram_html(text)
     except Exception as e:
@@ -147,6 +151,7 @@ async def praise_pet(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
     if not client: return "Какая замечательная тушка! 10/10 ковбойских шляп 🐱🤠"
     prompt = (
         "Ты — суровый Шериф Дикого Запада, который обожает котиков, собак и любых домашних питомцев. "
+        "Рассуждай кратко (до 10 слов в <think>). "
         "Похвали питомца на фото теплой ковбойской фразой (1-2 предложения). Поставь оценку (например, 10/10 ковбойских шляп или 100/10 ворсинок). "
         "Пиши все свои мысли и итоговый текст исключительно на русском языке."
     )
@@ -155,7 +160,7 @@ async def praise_pet(image_bytes: bytes, mime_type: str = 'image/jpeg') -> str:
             image_bytes=image_bytes,
             prompt=prompt,
             temperature=0.8,
-            max_tokens=300
+            max_tokens=1000
         )
         return format_telegram_html(text)
     except Exception as e:

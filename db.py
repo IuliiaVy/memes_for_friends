@@ -61,8 +61,14 @@ async def get_or_create_user(user_id: int):
         
     return user
 
+ACTION_COLUMNS = {
+    'roast': 'free_roasts_used',
+    'brigada': 'free_brigada_used',
+    'vibe': 'free_vibe_used'
+}
+
 async def use_free_action(user_id: int, action_type: str):
-    col = f"free_{action_type}_used"
+    col = ACTION_COLUMNS.get(action_type, f"free_{action_type}_used")
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(f'UPDATE users SET {col} = {col} + 1 WHERE user_id = ?', (user_id,))
         await db.commit()

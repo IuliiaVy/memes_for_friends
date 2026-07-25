@@ -15,9 +15,8 @@ def strip_think_tags(text):
     if '</think>' in text:
         text = text.split('</think>')[-1]
     elif '<think>' in text:
-        # Если есть открывающий тег <think>, но нет закрывающего, берем только текст до него (если есть) или пустую строку
-        parts = text.split('<think>')
-        text = parts[0] if parts[0].strip() else parts[-1]
+        # Если тег <think> открыт, но не закрыт, всё после <think> — это недописанный черновик, отрезаем его полностью
+        text = text.split('<think>')[0]
     return text.strip()
 
 def format_telegram_html(text: str) -> str:

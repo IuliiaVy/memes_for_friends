@@ -10,7 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import config
-from ai_service import is_political, explain_meme, roast_meme, vibe_check
+from ai_service import is_political, explain_meme, roast_meme, vibe_check, praise_pet
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import db
 
@@ -81,13 +81,18 @@ async def retro_moderation_job():
                     except Exception as e:
                         print(f"Failed to delete original: {e}")
                 else:
-                    # Постим в группу
+                    # Постим в группу с динамическими подписями
+                    RETRO_CAPTIONS = [
+                        "🤠 Смотри, что я нашел у себя в кармане...",
+                        "🤠 Покопался в архивах и нашел этот шедевр из прошлого...",
+                        "🤠 Опачки, смотрите-ка, какой раритет сдуло ветром из прошлых лет..."
+                    ]
                     try:
                         await bot.copy_message(
                             chat_id=config.MAIN_GROUP_ID,
                             from_chat_id=config.MAIN_GROUP_ID,
                             message_id=random_id,
-                            caption="🤠 Покопался в архивах и нашел этот шедевр из прошлого. Кто помнит, чей это был вайб?"
+                            caption=random.choice(RETRO_CAPTIONS)
                         )
                     except Exception:
                         pass
@@ -192,6 +197,26 @@ async def cmd_brigada(message: Message):
         await message.reply("Я не умею анализировать анимированные или видео-стикеры. Дайте мне обычную картинку!")
         return
     
+    if message.chat.type == "private":
+        user_id = message.from_user.id
+        user = await db.get_or_create_user(user_id)
+        if user['free_brigada_used'] < 5:
+            await db.use_free_action(user_id, 'brigada')
+        elif user['stars_balance'] > 0:
+            await db.use_star(user_id)
+        else:
+            prices = [LabeledPrice(label="1 Пояснение", amount=1)]
+            await bot.send_invoice(
+                chat_id=message.chat.id,
+                title="Вызов пояснительной бригады",
+                description="Дневной запас бесплатных вызовов бригады (5/день) закончился. Вызови за 1 ⭐️!",
+                payload="buy_1_check",
+                provider_token="",
+                currency="XTR",
+                prices=prices
+            )
+            return
+
     processing_msg = await message.reply("Вызываю пояснительную бригаду ИИ...")
     try:
         image_bytes = await download_image(message.reply_to_message)
@@ -213,6 +238,26 @@ async def cmd_vibe_check(message: Message):
         await message.reply("Анимированные стикеры слишком быстрые, я не успеваю считать их вайб. Выберите статичный!")
         return
     
+    if message.chat.type == "private":
+        user_id = message.from_user.id
+        user = await db.get_or_create_user(user_id)
+        if user['free_vibe_used'] < 5:
+            await db.use_free_action(user_id, 'vibe')
+        elif user['stars_balance'] > 0:
+            await db.use_star(user_id)
+        else:
+            prices = [LabeledPrice(label="1 Проверка вайба", amount=1)]
+            await bot.send_invoice(
+                chat_id=message.chat.id,
+                title="Проверка вайба",
+                description="Дневной запас бесплатных проверок вайба (5/день) закончился. Проверь за 1 ⭐️!",
+                payload="buy_1_check",
+                provider_token="",
+                currency="XTR",
+                prices=prices
+            )
+            return
+
     processing_msg = await message.reply("Сканирую ауру мема...")
     try:
         image_bytes = await download_image(message.reply_to_message)
@@ -258,24 +303,31 @@ async def cmd_post_to_best(message: Message):
         print(f"Error copying to channel: {e}")
         await safe_edit_text(processing_msg, "Не удалось сохранить мем. Возможно, я не являюсь администратором в канале или формат не поддерживается.")
 
-@dp.message(Command("survey"))
-async def cmd_survey(message: Message):
-    """Отправляет опрос для сбора фидбека (Smoke Test из Lean UX Canvas)"""
+@dp.message(Command("warn"))
+async def cmd_warn(message: Message):
+    """Админская команда для отправки замечания нарушителю от лица Шерифа."""
     if str(message.from_user.id) != str(config.ADMIN_CHAT_ID):
-        await message.reply("Только мэр этого города (админ) может запускать опросы.")
         return
         
-    await message.answer_poll(
-        question="Опрос от Шерифа: Я не слишком навязчивый со своими прожарками на этой неделе?",
-        options=[
-            "Всё супер, жги еще! 🤠",
-            "Нормально, но можно чуть реже.",
-            "Ты меня бесишь, шериф. Угомонись! 🤬",
-            "Я вообще не понимаю, кто ты такой."
-        ],
-        is_anonymous=True,
-        allows_multiple_answers=False
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.reply("Использование: `/warn @username Сообщение`", parse_mode="Markdown")
+        return
+        
+    target_user = args[1]
+    warn_text = args[2]
+    
+    target_chat_id = message.chat.id if message.chat.type != "private" else config.MAIN_GROUP_ID
+    if not target_chat_id:
+        await message.reply("Не указан основной чат для отправки.")
+        return
+        
+    await bot.send_message(
+        chat_id=target_chat_id,
+        text=f"🤠 <b>Официальное замечание от Шерифа:</b>\n{target_user}, {warn_text}"
     )
+    if message.chat.type == "private":
+        await message.reply("Замечание успешно доставлено в чат!")
 
 # ================= СОБЫТИЯ (EVENTS) =================
 
@@ -295,12 +347,9 @@ async def welcome_new_members(message: Message):
 
 @dp.message(F.photo | F.sticker)
 async def handle_media(message: Message):
-    # Check for #нюдсочетверг exception
     caption = message.caption or ""
     if "#нюдсочетверг" in caption.lower():
         return
-        
-    # 1. Check text caption for bad cat name (TEMPORARILY DISABLED)
         
     # Skip animated/video stickers for AI checks
     if message.sticker and (message.sticker.is_animated or message.sticker.is_video):
@@ -312,24 +361,32 @@ async def handle_media(message: Message):
     except Exception as e:
         print(f"Failed to download media: {e}")
         return
+
+    # #котопятница handler
+    if "#котопятница" in caption.lower():
+        praise = await praise_pet(image_bytes)
+        await message.reply(praise)
+        return
     
     # 2. Check for political content
     is_pol = await is_political(image_bytes)
     if is_pol:
         if config.ADMIN_CHAT_ID:
             try:
-                # Отправляем поясняющее сообщение
                 await bot.send_message(
                     chat_id=config.ADMIN_CHAT_ID,
-                    text=f"🚨 Шериф конфисковал политический мем от @{message.from_user.username}. Вот что пытались пронести в город:"
+                    text=f"🚨 Шериф конфисковал политический мем от @{message.from_user.username or message.from_user.id}. Вот что пытались пронести в город:"
                 )
-                # Пересылаем мем админу перед удалением
                 await message.forward(chat_id=config.ADMIN_CHAT_ID)
             except Exception as e:
                 print(f"Не удалось переслать мем админу: {e}")
         
         await message.delete()
-        await message.answer(f"@{message.from_user.username}, мем конфискован. Оставим политику для новостей.")
+        POLITICAL_WARNINGS = [
+            f"@{message.from_user.username or message.from_user.id}, мем конфискован. Оставим политику для новостей. 🛑",
+            f"Эй, @{message.from_user.username or message.from_user.id}, давай без политики. Спрячь эту листовку в карман, а то у меня шпоры звенят 🤠"
+        ]
+        await message.answer(random.choice(POLITICAL_WARNINGS))
         return
 
     # 3. Random meme roast in group or DB logic in private
@@ -337,22 +394,20 @@ async def handle_media(message: Message):
         user_id = message.from_user.id
         user = await db.get_or_create_user(user_id)
         
-        if user['free_checks_used'] < 5:
-            await db.use_free_check(user_id)
-            checks_left = 4 - user['free_checks_used']
-            processing_msg = await message.reply(f"Проверяю... (Осталось бесплатных проверок сегодня: {checks_left})")
+        if user['free_roasts_used'] < 5:
+            await db.use_free_action(user_id, 'roast')
+            processing_msg = await message.reply("Проверяю...")
         elif user['stars_balance'] > 0:
             await db.use_star(user_id)
-            processing_msg = await message.reply(f"Проверяю... (Потрачена 1 ⭐️. Остаток: {user['stars_balance'] - 1} ⭐️)")
+            processing_msg = await message.reply("Проверяю... (Потрачена 1 ⭐️)")
         else:
-            # Need to buy stars
             prices = [LabeledPrice(label="1 Проверка", amount=1)]
             await bot.send_invoice(
                 chat_id=message.chat.id,
                 title="Дополнительная проверка мема",
-                description="Бесплатные проверки (5/день) закончились. Купи проверку за 1 Telegram Star, чтобы продолжить.",
+                description="Ого, ты сегодня уже израсходовал свой дневной запас из 5 бесплатных патронов! Запасной патрон стоит всего 1 ⭐️.",
                 payload="buy_1_check",
-                provider_token="", # Empty for Telegram Stars
+                provider_token="",
                 currency="XTR",
                 prices=prices
             )
@@ -361,13 +416,7 @@ async def handle_media(message: Message):
         roast = await roast_meme(image_bytes)
         
         builder = InlineKeyboardBuilder()
-        dispute_text = random.choice([
-            "Шериф, ты не так понял! 🫣",
-            "Я могу всё объяснить... 🤠",
-            "Шериф, протри очки! 👓",
-            "Это подстава! Я буду жаловаться мэру 📜"
-        ])
-        builder.button(text=dispute_text, callback_data=f"dispute_{message.message_id}")
+        builder.button(text="Это подстава! 📜", callback_data=f"dispute_{message.message_id}")
         
         await safe_edit_text(processing_msg, roast, reply_markup=builder.as_markup())
         
@@ -481,9 +530,10 @@ async def main():
     # Регистрируем команды в меню Telegram
     await set_commands(bot)
     
-    # Инициализация и запуск шедулера
+    # Инициализация и запуск шедулера (2 раза в день: 11:00 и 19:00 МСК)
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
-    scheduler.add_job(retro_moderation_job, 'cron', hour=12, minute=0)
+    scheduler.add_job(retro_moderation_job, 'cron', hour=11, minute=0)
+    scheduler.add_job(retro_moderation_job, 'cron', hour=19, minute=0)
     scheduler.start()
     
     # Запускаем веб-сервер параллельно с поллингом телеграм-бота

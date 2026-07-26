@@ -66,7 +66,7 @@ async def is_political(image_bytes: bytes, mime_type: str = 'image/jpeg') -> boo
         "Ты — модератор чата. Твоя задача — блокировать исключительно политику России (РФ).\n\n"
         "Отвечай 'ДА' (заблокировать), если картинка или её текст касается политики России (Путин, Кадыров, СВО, правительство РФ, чиновники РФ, новости РФ).\n\n"
         "Отвечай 'НЕТ' (пропустить) для всей зарубежной политики (США, Трамп, Байден, Симпсоны), бытового юмора и котиков.\n\n"
-        "Рассуждай кратко. Ответь строго одним словом в конце: ДА или НЕТ."
+        "Рассуждай кратко (до 10 слов в <think>). Ответь строго одним словом в конце: ДА или НЕТ."
     )
     try:
         text = await _generate_with_retry(
@@ -76,7 +76,7 @@ async def is_political(image_bytes: bytes, mime_type: str = 'image/jpeg') -> boo
             max_tokens=600
         )
         text = text.strip().lower()
-        return 'да' in text or 'yes' in text
+        return bool(re.search(r'\b(да|yes)\b', text))
     except Exception as e:
         print(f"Error checking political content: {e}")
         return False
